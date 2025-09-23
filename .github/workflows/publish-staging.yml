@@ -1,0 +1,20 @@
+name: publish-staging.yml
+
+on:
+  push:
+    branches:
+      - '**'  # trigger deployment to staging on push to any branch
+  workflow_dispatch:
+
+jobs:
+  publish_lambda:
+    uses: ./.github/workflows/publish.yml
+    with:
+      aws_account_id: "077439031059"
+      environment_name: "staging"
+      version: "latest"
+
+    # Required for OIDC access
+    permissions:
+      id-token: write
+      contents: read

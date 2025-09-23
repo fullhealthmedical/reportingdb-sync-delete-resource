@@ -1,0 +1,88 @@
+name: publish lambda to s3
+
+on:
+  workflow_call:
+    inputs:
+      aws_account_id:
+        required: true
+        type: string
+      environment_name:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+
+jobs:
+
+  publish_lambda:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: "eu-west-1"
+      LAMBDA_ZIP: "reportingdb-sync-delete-resource-${{ inputs.version }}.zip"
+      SCHEMA_DB_IMAGE: "${{ inputs.aws_account_id }}.dkr.ecr.eu-west-1.amazonaws.com/reportingdb-schema:v20250919160626"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ inputs.aws_account_id }}:role/GithubActionsKubernetesDeployer"
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1.4'
+          bundler-cache: true
+
+      - name: Authenticate Docker to AWS ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ inputs.aws_account_id }}.dkr.ecr.eu-west-1.amazonaws.com
+
+      - name: Pull reportingdb-schema image
+        run: |
+          docker pull ${{ env.SCHEMA_DB_IMAGE }}
+
+      - name: Run reportingdb-schema container
+        run: |
+          docker run --rm -d -p 5432:5432 ${{ env.SCHEMA_DB_IMAGE }}
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in {1..30}; do
+            if docker exec $(docker ps -q --filter ancestor=${{ env.SCHEMA_DB_IMAGE }}) pg_isready -U postgres; then
+              echo "Postgres is ready!"
+              break
+            fi
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+
+      - name: Run tests
+        run: |
+          bundle install --with development test
+          bundle exec rspec
+
+      - name: Build Lambda package
+        run: |
+          bundle config set path 'vendor/bundle'
+          bundle install --without development test
+
+      - name: Build deployment zip
+        run: |
+          zip -r ${{ env.LAMBDA_ZIP }} reportingdb_sync_delete_resource.rb vendor/bundle
+
+      - name: Publish Lambda to S3
+        run: |
+          ACCOUNT_ID=${{ inputs.account_id }}          
+          S3_BUCKET="fhm-internal-${{ inputs.environment_name}}/lambdas/reportingdb-sync-delete-resource"
+          
+          # Upload the Lambda zip file to S3
+          aws s3 cp ${{ env.LAMBDA_ZIP}} s3://$S3_BUCKET/$LAMBDA_ZIP
+          
+          echo "Lambda function uploaded to s3://$S3_BUCKET/$LAMBDA_ZIP"

@@ -1,0 +1,20 @@
+name: publish-production.yml
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  publish_lambda:
+    uses: ./.github/workflows/publish.yml
+    with:
+      aws_account_id: "762836455239"
+      environment_name: "production"
+      version: "${{ github.ref_name }}"
+
+    # Required for OIDC access
+    permissions:
+      id-token: write
+      contents: read

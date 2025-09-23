@@ -1,3 +1,4 @@
+require 'bundler/setup'
 require 'pg'
 require 'json'
 require 'logger'
