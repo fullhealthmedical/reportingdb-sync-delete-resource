@@ -1,7 +1,7 @@
 FROM public.ecr.aws/lambda/ruby:3.2
 
 # Copy function code
-COPY lambda_function.rb ${LAMBDA_TASK_ROOT}
+COPY reportingdb_sync_delete_resource.rb ${LAMBDA_TASK_ROOT}
 
 # Copy Gemfile and install dependencies
 COPY Gemfile ${LAMBDA_TASK_ROOT}

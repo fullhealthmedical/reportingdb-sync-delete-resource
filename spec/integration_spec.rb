@@ -1,7 +1,7 @@
 require 'rspec'
 require 'pg'
 require 'dotenv'
-require_relative '../lambda_function'
+require_relative '../reportingdb_sync_delete_resource'
 
 RSpec.describe 'ResourceDeleter Integration Tests', :integration do
   let(:deleter) { ResourceDeleter.new }

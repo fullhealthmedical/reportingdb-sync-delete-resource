@@ -1,6 +1,6 @@
 require 'rspec'
 require 'pg'
-require_relative '../lambda_function'
+require_relative '../reportingdb_sync_delete_resource'
 
 RSpec.describe ResourceDeleter do
   let(:deleter) { ResourceDeleter.new }
