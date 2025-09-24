@@ -79,14 +79,14 @@ PLATFORMS
 DEPENDENCIES
   dotenv (~> 2.8)
   json (~> 2.6)
-  pg (~> 1.6)
+  pg (~> 1.5)
   rspec (~> 3.12)
   rspec-mocks (~> 3.12)
   rubocop (~> 1.56)
   rubocop-rspec (~> 2.24)
 
 RUBY VERSION
-   ruby 3.2.0p0
+   ruby 3.2.9p265
 
 BUNDLED WITH
    2.5.11

@@ -37,8 +37,14 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2.0'
+          ruby-version: '3.2.9'
           bundler-cache: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev zip
+          bundle install
 
       - name: Authenticate Docker to AWS ECR
         run: |
@@ -69,15 +75,58 @@ jobs:
           bundle install --with development test
           bundle exec rspec
 
-      - name: Build Lambda package for AWS Lambda (Amazon Linux 2 + Ruby 3.2)
+      - name: Create deployment directory
         run: |
-          docker run --rm -v "$PWD":/var/task -w /var/task -e LAMBDA_ZIP="${{ env.LAMBDA_ZIP }}" ${{ env.AWS_RUBY_IMAGE }} bash -c '
-            dnf -y install gcc make postgresql-devel openssl-devel redhat-rpm-config
-            bundle config set --local path 'vendor/bundle'
-            bundle config set path vendor/bundle
-            bundle install --without development test
-            zip -r "$LAMBDA_ZIP" reportingdb_sync_delete_resource.rb vendor
-          '
+          mkdir -p lambda-deployment
+          cp reportingdb_sync_delete_resource.rb lambda-deployment/
+          cp Gemfile lambda-deployment/
+          cp Gemfile.lock lambda-deployment/ || echo "Gemfile.lock not found, will be created during bundle install"
+
+      - name: Install gems with bundle
+        run: |
+          cd lambda-deployment
+          bundle config set --local deployment 'true'
+          bundle config set --local without 'development test'
+          bundle config set path vendor/bundle
+          bundle install
+
+      - name: Create Lambda layer for gems (recommended approach)
+        run: |
+          mkdir -p lambda-layer/ruby/gems/3.2.0/
+          cd lambda-deployment
+          # cp -r vendor/bundle/* ../lambda-layer/ruby/gems/
+          cp -r vendor/bundle/ruby/3.2.0/* ../lambda-layer/ruby/gems/3.2.0/
+          cd ../lambda-layer
+          zip -r ../ruby-gems-layer.zip .
+
+      - name: Create Lambda function package
+        run: |
+          cd lambda-deployment
+          # Remove vendor directory as we'll use a layer
+          rm -rf vendor
+          zip -r ../${{ env.LAMBDA_ZIP }} .
+
+      - name: Deploy Lambda Layer
+        run: |
+          LAYER_VERSION=$(aws lambda publish-layer-version \
+            --layer-name ruby-postgres-gems \
+            --description "Ruby gems including pg for PostgreSQL" \
+            --zip-file fileb://ruby-gems-layer.zip \
+            --compatible-runtimes ruby3.2 \
+            --query 'Version' --output text)
+          echo "LAYER_VERSION=$LAYER_VERSION" >> $GITHUB_ENV
+          
+      
+
+#      - name: Build Lambda package for AWS Lambda (Amazon Linux 2 + Ruby 3.2)
+#        run: |
+#          docker run --rm -v "$PWD":/var/task -w /var/task -e LAMBDA_ZIP="${{ env.LAMBDA_ZIP }}" ${{ env.AWS_RUBY_IMAGE }} bash -c '
+#            dnf -y install gcc make postgresql-devel openssl-devel redhat-rpm-config
+#            bundle config set --local path 'vendor/bundle'
+#            bundle config set path vendor/bundle
+#            bundle install --without development test
+#            zip -r "$LAMBDA_ZIP" reportingdb_sync_delete_resource.rb vendor
+#          '
 
       - name: Publish Lambda to S3
         run: |
@@ -86,5 +135,6 @@ jobs:
           
           # Upload the Lambda zip file to S3
           aws s3 cp ${{ env.LAMBDA_ZIP}} s3://$S3_BUCKET/$LAMBDA_ZIP
+          aws s3 cp ruby-gems-layer.zip s3://$S3_BUCKET/ruby-gems-layer.zip
           
           echo "Lambda function uploaded to s3://$S3_BUCKET/$LAMBDA_ZIP"
