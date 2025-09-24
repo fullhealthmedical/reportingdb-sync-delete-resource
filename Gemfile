@@ -1,9 +1,9 @@
 source 'https://rubygems.org'
 
-ruby '3.1.4'
+ruby '3.2.0'
 
 gem 'json', '~> 2.6'
-gem 'pg', '~> 1.5'
+gem "pg", "~> 1.6", force_ruby_platform: true
 
 group :development, :test do
   gem 'rspec', '~> 3.12'

@@ -22,6 +22,7 @@ jobs:
       AWS_REGION: "eu-west-1"
       LAMBDA_ZIP: "reportingdb-sync-delete-resource-${{ inputs.version }}.zip"
       SCHEMA_DB_IMAGE: "${{ inputs.aws_account_id }}.dkr.ecr.eu-west-1.amazonaws.com/reportingdb-schema:v20250919160626"
+      AWS_RUBY_IMAGE: "${{ inputs.aws_account_id }}.dkr.ecr.eu-west-1.amazonaws.com/awsruby32:latest"
 
     steps:
       - name: Checkout repository
@@ -36,7 +37,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.1.4'
+          ruby-version: '3.2.0'
           bundler-cache: true
 
       - name: Authenticate Docker to AWS ECR
@@ -68,14 +69,15 @@ jobs:
           bundle install --with development test
           bundle exec rspec
 
-      - name: Build Lambda package
+      - name: Build Lambda package for AWS Lambda (Amazon Linux 2 + Ruby 3.2)
         run: |
-          bundle config set path 'vendor/bundle'
-          bundle install --without development test
-
-      - name: Build deployment zip
-        run: |
-          zip -r ${{ env.LAMBDA_ZIP }} reportingdb_sync_delete_resource.rb vendor/bundle
+          docker run --rm -v "$PWD":/var/task -w /var/task -e LAMBDA_ZIP="${{ env.LAMBDA_ZIP }}" ${{ env.AWS_RUBY_IMAGE }} bash -c '
+            dnf -y install gcc make postgresql-devel openssl-devel redhat-rpm-config
+            bundle config set --local path 'vendor/bundle'
+            bundle config set path vendor/bundle
+            bundle install --without development test
+            zip -r "$LAMBDA_ZIP" reportingdb_sync_delete_resource.rb vendor
+          '
 
       - name: Publish Lambda to S3
         run: |
